@@ -1,7 +1,25 @@
-import ase
+from ase.io import read, write
+from optparse import OptionParser
+
+
+
+
+parser = OptionParser()
+parser.add_option("-g", "--geometry", dest="geometry",
+                  help="Geometry")
+parser.add_option("-f", "--format", dest="format",
+                  help="Format of the geometry")
+(options, args) = parser.parse_args()
+
+
+
+
+
 """ The workflow"""
 
 # Read the example geometry file or read SMILES code
+atoms = read(options.geometry, format=options.format)
+print(atoms)
 
 
 # Preface
