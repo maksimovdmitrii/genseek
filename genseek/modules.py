@@ -135,3 +135,138 @@ def carried_atoms(atoms, positions):
 
 
 
+def unit_vector(vector):
+    """ Returns the unit vector of the vector."""
+    if np.linalg.norm(vector) == 0.:
+        vector = np.array([0.,0.,0.0000000001])    #       Not to forget to check again this section
+    return vector / np.linalg.norm(vector)
+
+
+def angle_between(v1, v2):
+    """Returns angle between two vectors"""
+    v1_u = unit_vector(v1)
+    v2_u = unit_vector(v2)
+    return np.arccos(np.dot(v1_u, v2_u))*180./np.pi
+
+
+def translate(point, coord):
+    translated = coord[:] - point[:]
+    return translated
+
+
+def translate_back(point, coord):
+    translated = coord[:] + point[:]
+    return translated
+
+
+def mult_quats(q_1, q_2):
+    Q_q_2 = np.array([[q_2[0], q_2[1], q_2[2], q_2[3]],
+                     [-q_2[1], q_2[0], -q_2[3], q_2[2]],
+                     [-q_2[2], q_2[3], q_2[0], -q_2[1]],
+                     [-q_2[3], -q_2[2], q_2[1], q_2[0]]])
+    q_3 = np.dot(q_1, Q_q_2)
+    return q_3
+
+
+def unit_quaternion(q):
+    ones = np.ones((1,4))
+    ones[:,0] = np.cos(q[0]*np.pi/180/2)
+    vec = np.array([q[1], q[2], q[3]])
+    vec = unit_vector(vec)
+    ones[:,1:] = vec*np.sin(q[0]*np.pi/180/2)
+    quaternion = ones[0]
+    return quaternion
+
+
+def rotation_quat(coord, q):
+    q = unit_quaternion(q)
+    R_q = np.array([[1 - 2*q[2]**2 - 2*q[3]**2, 2*q[1]*q[2] - 2*q[0]*q[3], 2*q[1]*q[3] + 2*q[0]*q[2]],
+                    [2*q[2]*q[1] + 2*q[0]*q[3], 1 - 2*q[3]**2 - 2*q[1]**2, 2*q[2]*q[3] - 2*q[0]*q[1]],
+                    [2*q[3]*q[1] - 2*q[0]*q[2], 2*q[3]*q[2] + 2*q[0]*q[1], 1 - 2*q[1]**2 - 2*q[2]**2]])
+    rotated = np.dot(R_q, coord.transpose())
+    return rotated.transpose()
+
+
+def Rotation(coord, point, quaternion):
+    trans = translate(point, coord)
+    rotate = rotation_quat(trans, quaternion)
+    final = translate_back(point, rotate)
+    return np.array(final)
+
+
+def produce_quaternion(angle, vector):
+    ones = np.ones((1, 4))
+    ones[:, 0] = angle
+    ones[:, 1:] = unit_vector(vector[:])
+    quaternion = ones[0]
+    return quaternion
+
+
+def produce_coords_and_masses(coords, masses):
+    zeros = np.zeros((len(coords), 4))
+    zeros[:, :3] = coords[:]
+    zeros[:, 3] = masses[:]
+    return zeros
+
+
+
+
+def measure_quaternion(atoms, atom_1_indx, atom_2_indx):
+
+    # To revise and test
+    coords = atoms.get_positions()
+    orient_vec = unit_vector(coords[atom_2_indx] -
+                                      coords[atom_1_indx])
+    x_axis = np.array([1, 0, 0])
+    z_axis = np.array([0, 0, 1])
+    center = atoms.get_center_of_mass()          
+    inertia_tensor = atoms.get_moments_of_inertia(vectors=True)    
+    eigvals = inertia_tensor[0]
+    eigvecs = inertia_tensor[1]     
+    z_index = np.argmax(eigvals)                                      
+    x_index = np.argmin(eigvals)                                      
+    if np.dot(unit_vector(eigvecs[z_index]), orient_vec) < 0:
+        eigvecs[z_index] = -eigvecs[z_index]
+    ang_1 = angle_between(eigvecs[z_index], z_axis)                   
+    vec_1 = np.cross(eigvecs[z_index], z_axis)                        
+    quat_1 = produce_quaternion(ang_1, vec_1)                           
+    rotated_1 = Rotation(coords, center, quat_1)       
+    atoms.set_positions(rotated_1 )
+    orient_vec_2 = unit_vector(rotated_1[atom_2_indx] - rotated_1[atom_1_indx])
+    eigs_after = atoms.get_moments_of_inertia(vectors=True)[1]
+    if np.dot(unit_vector(eigs_after[x_index]), orient_vec_2) < 0:
+        eigs_after[x_index] = -eigs_after[x_index]
+    angle_x = angle_between(eigs_after[x_index], x_axis)
+    print(angle_x)
+    if np.dot(np.cross(unit_vector(eigs_after[x_index]), x_axis), z_axis) > 0:
+        angle_x = -angle_x
+    quaternion_of_the_molecule = np.array([angle_x, eigvecs[z_index, 0], eigvecs[z_index, 1], eigvecs[z_index, 2]])
+    return quaternion_of_the_molecule
+
+def align_to_axes(atoms, atom_1_indx, atom_2_indx):
+
+    coords = atoms.get_positions() 
+    center = atoms.get_center_of_mass()
+    quaternion = measure_quaternion(atoms, atom_1_indx, atom_2_indx)
+    vec = np.cross(quaternion[1:], np.array([0, 0, 1]))
+    angle = angle_between(quaternion[1:], np.array([0, 0, 1]))
+    quat_1 = produce_quaternion(angle, vec)
+    rotation_1 = Rotation(coords, center, quat_1)
+    angle_2 = -quaternion[0]
+    quat_2 = produce_quaternion(angle_2, np.array([0, 0, 1]))
+    rotation_2 = Rotation(rotation_1, center, quat_2)
+    return atoms.set_positions(rotation_2)
+
+
+def quaternion_set(atoms, quaternion, atom_1_indx, atom_2_indx):
+
+    coords = atoms.get_positions()
+    center = atoms.get_center_of_mass()
+    align_to_axes(atoms, atom_1_indx, atom_2_indx)
+    first_rot = produce_quaternion(quaternion[0], np.array([0, 0, 1]))
+    rotation_1 = Rotation(atoms.get_positions(), center, first_rot)
+    angle_2 = angle_between(np.array([0, 0, 1]), quaternion[1:])
+    vec_2 = np.cross(np.array([0, 0, 1]), quaternion[1:])
+    quat_2 = produce_quaternion(angle_2, vec_2)
+    rotation_2 = Rotation(rotation_1, center, quat_2)
+    return atoms.set_positions(rotation_2)
