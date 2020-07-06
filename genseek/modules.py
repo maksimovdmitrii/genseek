@@ -67,13 +67,12 @@ def create_connectivity_matrix(atoms):
     connectivity_matrix = neighborList.get_connectivity_matrix()
     return connectivity_matrix
 
-def detect_rotatble(atoms):
+def detect_rotatble(connectivity_matrix):
     """Detection of all rotatable bonds
     2. The bonds does not contain terminate atoms
     2. 
     3. 
     """
-    connectivity_matrix = create_connectivity_matrix(atoms)
     graph = construct_graph(connectivity_matrix)
     indx_not_terminal = [i for i in graph if len(graph[i]) > 1]
     conn = [i for i in connectivity_matrix.keys() 
@@ -123,9 +122,8 @@ def insertbreak(graph, atom1, atom2):
     return graph
 
 
-def carried_atoms(atoms, positions):
+def carried_atoms(connectivity_matrix, positions):
     """ Returns list of carried atoms """
-    connectivity_matrix = create_connectivity_matrix(atoms)
     graph = construct_graph(connectivity_matrix)
     graph_with_break = insertbreak(graph, positions[1], positions[2])
     if positions[2] in list(getroots(graph_with_break).values())[0]:
@@ -208,9 +206,6 @@ def produce_coords_and_masses(coords, masses):
     zeros[:, 3] = masses[:]
     return zeros
 
-
-
-
 def measure_quaternion(atoms, atom_1_indx, atom_2_indx):
 
     # To revise and test
@@ -270,3 +265,13 @@ def quaternion_set(atoms, quaternion, atom_1_indx, atom_2_indx):
     quat_2 = produce_quaternion(angle_2, vec_2)
     rotation_2 = Rotation(rotation_1, center, quat_2)
     return atoms.set_positions(rotation_2)
+
+def internal_clashes(atoms, connectivity_matrix):
+
+    clashes = False
+    a = create_connectivity_matrix(atoms).keys()
+    b = connectivity_matrix.keys()
+    if len(list(set(a) - set(b))) != 0:
+        clashes = True
+    return clashes
+
