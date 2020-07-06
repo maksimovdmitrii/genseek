@@ -290,3 +290,30 @@ def intermolecular_clashes(molecules):
 
     return all(i >= 1.5 for i in distances.flatten()) 
 
+
+def intermolecular_clashes(molecules):
+
+    all_atoms = molecules[0].copy()
+    for molecule in molecules[1:]:
+        all_atoms.extend(molecule)
+    distances = all_atoms.get_all_distances().reshape(len(all_atoms), len(all_atoms))
+
+    for i in range(len(molecules)):
+        values = np.ones(len(molecules[i])**2).reshape(len(molecules[i]), len(molecules[i])) * 100
+        distances[len(molecules[i])*i:len(molecules[i])*i + len(molecules[i]) ,
+                  len(molecules[i])*i:len(molecules[i])*i + len(molecules[i]) ] = values
+
+    return all(i >= 1.5 for i in distances.flatten()) 
+
+
+ def fixed_frame_clashes(molecule, fixed_frame):
+
+    all_atoms = molecule.extend(fixed_frame)
+    distances = all_atoms.get_all_distances().reshape(len(all_atoms), len(all_atoms))
+    values_mol = np.ones(len(molecule)**2).reshape(len(molecule), len(molecule)) * 100
+    distances[len(molecule):len(molecule) + len(molecule) ,
+              len(molecule):len(molecule) + len(molecule) ] = values_mol
+    values_fixed = np.ones(len(fixed_frame)**2).reshape(len(fixed_frame), len(fixed_frame)) * 100
+    distances[len(molecule) + len(molecule):len(molecule) + len(fixed_frame) ,
+              len(molecule) + len(molecule):len(molecule) + len(fixed_frame) ] = values_fixed
+    return all(i >= 1.5 for i in distances.flatten()) 
