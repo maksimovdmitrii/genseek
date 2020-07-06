@@ -232,7 +232,6 @@ def measure_quaternion(atoms, atom_1_indx, atom_2_indx):
     if np.dot(unit_vector(eigs_after[x_index]), orient_vec_2) < 0:
         eigs_after[x_index] = -eigs_after[x_index]
     angle_x = angle_between(eigs_after[x_index], x_axis)
-    print(angle_x)
     if np.dot(np.cross(unit_vector(eigs_after[x_index]), x_axis), z_axis) > 0:
         angle_x = -angle_x
     quaternion_of_the_molecule = np.array([angle_x, eigvecs[z_index, 0], eigvecs[z_index, 1], eigvecs[z_index, 2]])
@@ -266,6 +265,7 @@ def quaternion_set(atoms, quaternion, atom_1_indx, atom_2_indx):
     rotation_2 = Rotation(rotation_1, center, quat_2)
     return atoms.set_positions(rotation_2)
 
+
 def internal_clashes(atoms, connectivity_matrix):
 
     clashes = False
@@ -274,4 +274,19 @@ def internal_clashes(atoms, connectivity_matrix):
     if len(list(set(a) - set(b))) != 0:
         clashes = True
     return clashes
+
+def intermolecular_clashes(molecules):
+
+    import sys
+    all_atoms = molecules[0].copy()
+    for molecule in molecules[1:]:
+        all_atoms.extend(molecule)
+    distances = all_atoms.get_all_distances().reshape(len(all_atoms), len(all_atoms))
+
+    for i in range(len(molecules)):
+        values = np.ones(len(molecules[i])**2).reshape(len(molecules[i]), len(molecules[i])) * 100
+        distances[len(molecules[i])*i:len(molecules[i])*i + len(molecules[i]) ,
+                  len(molecules[i])*i:len(molecules[i])*i + len(molecules[i]) ] = values
+
+    return all(i >= 1.5 for i in distances.flatten()) 
 

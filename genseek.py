@@ -36,29 +36,30 @@ set_centre_of_mass(atoms, np.array([0, 0, 0]))
 align_to_axes(atoms,  0, len(atoms)-1)
 
 ## Specify number of molecules 
-molecules = [atoms.copy() for i in range(3)]
+molecules = [atoms.copy() for i in range(10)]
 # print(molecules)
+while not intermolecular_clashes(molecules):
+	for i in range(len(molecules)):
+		# Set torsions
+		for torsion in list_of_torsions:
+			value = randint(0, 360)
+			fixed_indices = carried_atoms(connectivity_matrix, torsion)
+			molecules[i].set_dihedral(angle=value,
+									  a1=torsion[0],
+									  a2=torsion[1],
+									  a3=torsion[2],
+									  a4=torsion[3],
+									  indices=fixed_indices)
 
-for i in range(len(molecules)):
-	# Set torsions
-	for torsion in list_of_torsions:
-		value = randint(0, 360)
-		fixed_indices = carried_atoms(connectivity_matrix, torsion)
-		molecules[i].set_dihedral(angle=value,
-								  a1=torsion[0],
-								  a2=torsion[1],
-								  a3=torsion[2],
-								  a4=torsion[3],
-								  indices=fixed_indices)
+		internal_clashes(molecules[i], connectivity_matrix)
+		# Set rotation
+		quaternion_set(molecules[i], produce_quaternion(0, np.array([0, 0, 1])), 0, len(atoms)-1)
+		# Set center of mass
+		value = np.array([randint(-10,10),
+						  randint(-10,10),
+						  randint(-10,10)])
+		set_centre_of_mass(molecules[i], value)
 
-	internal_clashes(molecules[i], connectivity_matrix)
-	# Set rotation
-	quaternion_set(molecules[i], produce_quaternion(0, np.array([0, 0, 1])), 0, len(atoms)-1)
-	# Set center of mass
-	value = np.array([randint(-10,10),
-					  randint(-10,10),
-					  randint(-10,10)])
-	set_centre_of_mass(molecules[i], value)
 
 # Write the enesemble into file 
 # add the fixed frame also
