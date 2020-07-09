@@ -67,7 +67,6 @@ def create_connectivity_matrix(atoms, bothways):
     neighborList = neighborlist.NeighborList(cutOff, self_interaction=False, bothways=bothways)
     neighborList.update(atoms)
     connectivity_matrix = neighborList.get_connectivity_matrix()
-
     return connectivity_matrix
 
 def detect_rotatble(connectivity_matrix):
@@ -86,6 +85,10 @@ def detect_rotatble(connectivity_matrix):
         for bond in conn:
             # Check for the index order
             list_of_torsions.append(create_torsion_list(bond, graph))
+    else:
+         for bond in conn:
+            # Check for the index order
+            list_of_torsions.append(create_torsion_list(bond, graph))       
     return list_of_torsions
 
 
@@ -340,25 +343,25 @@ def create_blacklist(molecules, list_of_torsions):
         blacklist = np.hstack((torsions, quaternion, value_com))        
     return blacklist
 
-from random import random, randint
+from random import random, randint, uniform
 def create_internal_vector(molecules, list_of_torsions):
 
     if len(molecules) > 1:
-        torsions = np.array([randint(0, 360) for i in list_of_torsions])
-        quaternion = produce_quaternion(randint(0, 360), np.array([random() for i in range(3)]))
-        value_com = np.array([randint(0, 13), randint(0, 13), randint(33, 38)])
-        vector = np.hstack((torsions, quaternion, value_com))
+        torsions = np.array([0 for i in list_of_torsions])
+        quaternion = produce_quaternion(randint(-180, 180), np.array([0,0,1]))
+        coms = np.array([uniform(0, 20), uniform(0, 20), uniform(5, 6)])
+        vector = np.hstack((torsions, quaternion, coms))
         for i in range(len(molecules) -1):
-            torsions = np.array([randint(0, 360) for i in list_of_torsions])
-            quaternion = produce_quaternion(randint(0, 360), np.array([random() for i in range(3)]))
-            value_com = np.array([randint(0, 13), randint(0, 13), randint(33, 38)])
-            vec = np.hstack((torsions, quaternion, value_com))
+            torsions = np.array([0 for i in list_of_torsions])
+            quaternion = produce_quaternion(randint(-180, 180), np.array([0,0,1]))
+            coms = np.array([uniform(0, 20), uniform(0, 20), uniform(5, 6)])   
+            vec = np.hstack((torsions, quaternion, coms))
             vector = np.hstack((vector, vec))
     else:
-        torsions = np.array([randint(0, 360) for i in list_of_torsions])
-        quaternion = produce_quaternion(randint(0, 360), np.array([random() for i in range(3)]))
-        value_com = np.array([randint(0, 13), randint(0, 13), randint(33, 38)])
-        vector = np.hstack((torsions, quaternion, value_com))        
+        torsions = np.array([0 for i in list_of_torsions])
+        quaternion = produce_quaternion(randint(-180, 180), np.array([0,0,1]))
+        coms = np.array([uniform(0, 20), uniform(0, 20), uniform(5, 6.0)])
+        vector = np.hstack((torsions, quaternion, coms))        
     return vector
 
 def add_to_blacklist(vector, blacklist):

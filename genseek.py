@@ -5,7 +5,7 @@ from genseek.modules import *
 import numpy as np
 import sys
 
-from random import randint
+from random import randint, random, uniform
 
 parser = OptionParser()
 parser.add_option("-g", "--geometry", dest="geometry",
@@ -54,13 +54,14 @@ align_to_axes(atoms,  0, len(atoms)-1)
 # 	sys.exit('The Cell is too small! Increase the cell size!')
 
 ## Specify number of molecules 
-molecules = [atoms.copy() for i in range(3)]
+molecules = [atoms.copy() for i in range(2)]
 
 # Blacklist
 blacklist = create_blacklist(molecules, list_of_torsions)
 	
-Trials = 10000
+Trials = 100000000000000
 Trial = 0
+
 
 while Trial<Trials:
 	Trial+=1
