@@ -2,6 +2,8 @@ from ase import neighborlist
 from ase.build import molecule
 from scipy import sparse
 import numpy as np
+import operator
+import sys
 
 def construct_graph(connectivity_matrix):
     """Constructu graph from connectivity matrix"""
@@ -60,11 +62,12 @@ def set_centre_of_mass(atoms, new_com):
     old_com = atoms.get_center_of_mass() 
     atoms.set_positions(old_positions - old_com + new_com)
 
-def create_connectivity_matrix(atoms):
+def create_connectivity_matrix(atoms, bothways):
     cutOff = neighborlist.natural_cutoffs(atoms)
-    neighborList = neighborlist.NeighborList(cutOff, self_interaction=False, bothways=False)
+    neighborList = neighborlist.NeighborList(cutOff, self_interaction=False, bothways=bothways)
     neighborList.update(atoms)
     connectivity_matrix = neighborList.get_connectivity_matrix()
+
     return connectivity_matrix
 
 def detect_rotatble(connectivity_matrix):
@@ -122,9 +125,9 @@ def insertbreak(graph, atom1, atom2):
     return graph
 
 
-def carried_atoms(connectivity_matrix, positions):
+def carried_atoms(connectivity_matrix_isolated, positions):
     """ Returns list of carried atoms """
-    graph = construct_graph(connectivity_matrix)
+    graph = construct_graph(connectivity_matrix_isolated)
     graph_with_break = insertbreak(graph, positions[1], positions[2])
     if positions[2] in list(getroots(graph_with_break).values())[0]:
         return list(getroots(graph_with_break).values())[0]
@@ -266,54 +269,162 @@ def quaternion_set(atoms, quaternion, atom_1_indx, atom_2_indx):
     return atoms.set_positions(rotation_2)
 
 
-def internal_clashes(atoms, connectivity_matrix):
+def internal_clashes(molecules, connectivity_matrix_full):
+    
+    clashes = True
+    for i in range(len(molecules)):
+        a = sorted(create_connectivity_matrix(molecules[i], bothways=True).keys(), key=lambda element: (element[1:]))
+        b = sorted(connectivity_matrix_full.keys(), key=lambda element: (element[1:]))
+        if operator.eq(set(a), set(b)):
+            pass
+        else:
+            clashes = False
 
-    clashes = False
-    a = create_connectivity_matrix(atoms).keys()
-    b = connectivity_matrix.keys()
-    if len(list(set(a) - set(b))) != 0:
-        clashes = True
     return clashes
 
-def intermolecular_clashes(molecules):
 
-    import sys
+def intramolecular_clashes(molecules, mic):
+
     all_atoms = molecules[0].copy()
     for molecule in molecules[1:]:
         all_atoms.extend(molecule)
-    distances = all_atoms.get_all_distances().reshape(len(all_atoms), len(all_atoms))
+    distances = all_atoms.get_all_distances(mic=mic).reshape(len(all_atoms), len(all_atoms))
 
     for i in range(len(molecules)):
         values = np.ones(len(molecules[i])**2).reshape(len(molecules[i]), len(molecules[i])) * 100
         distances[len(molecules[i])*i:len(molecules[i])*i + len(molecules[i]) ,
                   len(molecules[i])*i:len(molecules[i])*i + len(molecules[i]) ] = values
 
-    return all(i >= 1.5 for i in distances.flatten()) 
+    return not all(i >= 1.5 for i in distances.flatten()) 
 
 
-def intermolecular_clashes(molecules):
+def clashes_with_fixed_frame(molecules, fixed_frame, mic):
 
-    all_atoms = molecules[0].copy()
+    mols = molecules[0].copy()
     for molecule in molecules[1:]:
-        all_atoms.extend(molecule)
-    distances = all_atoms.get_all_distances().reshape(len(all_atoms), len(all_atoms))
-
-    for i in range(len(molecules)):
-        values = np.ones(len(molecules[i])**2).reshape(len(molecules[i]), len(molecules[i])) * 100
-        distances[len(molecules[i])*i:len(molecules[i])*i + len(molecules[i]) ,
-                  len(molecules[i])*i:len(molecules[i])*i + len(molecules[i]) ] = values
-
-    return all(i >= 1.5 for i in distances.flatten()) 
-
-
- def fixed_frame_clashes(molecule, fixed_frame):
-
-    all_atoms = molecule.extend(fixed_frame)
-    distances = all_atoms.get_all_distances().reshape(len(all_atoms), len(all_atoms))
-    values_mol = np.ones(len(molecule)**2).reshape(len(molecule), len(molecule)) * 100
-    distances[len(molecule):len(molecule) + len(molecule) ,
-              len(molecule):len(molecule) + len(molecule) ] = values_mol
+        mols.extend(molecule)
+    all_atoms = mols + fixed_frame
+    distances = all_atoms.get_all_distances(mic=mic).reshape(len(all_atoms), len(all_atoms))
+    values_mol = np.ones(len(mols)**2).reshape(len(mols), len(mols)) * 100
+    distances[0:len(mols) ,
+              0:len(mols) ] = values_mol
     values_fixed = np.ones(len(fixed_frame)**2).reshape(len(fixed_frame), len(fixed_frame)) * 100
-    distances[len(molecule) + len(molecule):len(molecule) + len(fixed_frame) ,
-              len(molecule) + len(molecule):len(molecule) + len(fixed_frame) ] = values_fixed
-    return all(i >= 1.5 for i in distances.flatten()) 
+    distances[len(mols) :len(mols) + len(fixed_frame)  ,
+              len(mols) :len(mols) + len(fixed_frame) ] = values_fixed
+
+    return not all(i >= 2.0 for i in distances.flatten())
+
+def all_right(molecules, fixed_frame, connectivity_matrix_full, mic):
+
+    ready = False
+    if internal_clashes(molecules, connectivity_matrix_full):
+        if not intramolecular_clashes(molecules, mic=mic):
+            if not clashes_with_fixed_frame(molecules, fixed_frame, mic):
+                ready = True
+    return ready
+
+def create_blacklist(molecules, list_of_torsions):
+
+    if len(molecules) > 1:
+        torsions = np.array([0 for i in list_of_torsions])
+        quaternion = produce_quaternion(0, np.array([0, 0, 1]))
+        value_com = np.array([0, 0, 0])
+        blacklist_one = np.hstack((torsions, quaternion, value_com))
+        blacklist = np.hstack((torsions, quaternion, value_com)) 
+        for i in range(len(molecules) -1):
+            blacklist = np.concatenate((blacklist, blacklist_one), axis=0)
+    else:
+        torsions = np.array([0 for i in list_of_torsions])
+        quaternion = produce_quaternion(0, np.array([0, 0, 1]))
+        value_com = np.array([0, 0, 0])
+        blacklist = np.hstack((torsions, quaternion, value_com))        
+    return blacklist
+
+from random import random, randint
+def create_internal_vector(molecules, list_of_torsions):
+
+    if len(molecules) > 1:
+        torsions = np.array([randint(0, 360) for i in list_of_torsions])
+        quaternion = produce_quaternion(randint(0, 360), np.array([random() for i in range(3)]))
+        value_com = np.array([randint(0, 13), randint(0, 13), randint(33, 38)])
+        vector = np.hstack((torsions, quaternion, value_com))
+        for i in range(len(molecules) -1):
+            torsions = np.array([randint(0, 360) for i in list_of_torsions])
+            quaternion = produce_quaternion(randint(0, 360), np.array([random() for i in range(3)]))
+            value_com = np.array([randint(0, 13), randint(0, 13), randint(33, 38)])
+            vec = np.hstack((torsions, quaternion, value_com))
+            vector = np.hstack((vector, vec))
+    else:
+        torsions = np.array([randint(0, 360) for i in list_of_torsions])
+        quaternion = produce_quaternion(randint(0, 360), np.array([random() for i in range(3)]))
+        value_com = np.array([randint(0, 13), randint(0, 13), randint(33, 38)])
+        vector = np.hstack((torsions, quaternion, value_com))        
+    return vector
+
+def add_to_blacklist(vector, blacklist):
+    return np.vstack((blacklist, vector))
+
+def not_in_blacklist(vector, blacklist):
+    check = False
+    dist = [np.linalg.norm(point - vector) for point in blacklist]
+    if len(dist) > 1:
+        if all(i > 100 for i in dist):
+            check= True
+    else:
+        if dist[0] > 100:
+            check= True
+    return check
+
+def apply_to_molecules(molecules, vector, list_of_torsions, connectivity_matrix_isolated):
+    for i in range(len(molecules)):
+        k=-1
+        for torsion in list_of_torsions:
+            k+=1
+            z=i*(len(list_of_torsions)+4+3)+k
+            fixed_indices = carried_atoms(connectivity_matrix_isolated, torsion)
+            molecules[i].set_dihedral(angle=vector[z],
+                                      a1=torsion[0],
+                                      a2=torsion[1],
+                                      a3=torsion[2],
+                                      a4=torsion[3],
+                                      indices=fixed_indices)
+        # Set orientation
+        quaternion_set(molecules[i], produce_quaternion(vector[z+1], 
+                                                        np.array([vector[z+2],
+                                                                 vector[z+3],
+                                                                 vector[z+4]])),
+                                                                0, len(molecules[i])-1)
+        # Set center of mass
+        set_centre_of_mass(molecules[i], np.array([vector[z+5], vector[z+6], vector[z+7]]))
+
+def measure_molecules(molecules, list_of_torsions):
+    vector = []
+    for i in range(len(molecules)):
+        for torsion in list_of_torsions:
+            vector.append(molecules[i].get_dihedral(
+                                      a1=torsion[0],
+                                      a2=torsion[1],
+                                      a3=torsion[2],
+                                      a4=torsion[3]))
+        # Set orientation
+        vector.append(measure_quaternion(molecules[i], 0, len(molecules[i])-1))
+        # Set center of mass
+        vector.append(molecules[i].get_center_of_mass())
+    return vector
+
+
+def assign_random_state(molecule, list_of_torsions):
+    for torsion in list_of_torsions:
+        value = randint(0, 360)
+        fixed_indices = carried_atoms(connectivity_matrix_isolated, torsion)
+        molecules[i].set_dihedral(angle=value,
+                                  a1=torsion[0],
+                                  a2=torsion[1],
+                                  a3=torsion[2],
+                                  a4=torsion[3],
+                                  indices=fixed_indices)
+    quaternion_set(molecules[i], produce_quaternion(value, np.array([value, value, value])), 0, len(atoms)-1)
+    value_com = np.array([randint(0, 13),
+                  randint(0, 13),
+                  randint(32, 36)])
+    set_centre_of_mass(molecules[i], value_com)
