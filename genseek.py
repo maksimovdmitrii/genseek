@@ -1,101 +1,54 @@
-from ase.io import read, write
+""" Generate and Search"""
+
+__author__ = "GenSeek"
+__copyright__ = "Copyright (C) 2020 Dmitrii Maksimov"
+__license__ = "Public Domain"
+__version__ = "0.1.1"
+
 from optparse import OptionParser
 
-from genseek.modules import *
+from genseek.blacklist import *
+from genseek.outputs import *
+from genseek.structure import *
+
 import numpy as np
 import sys
-
 from random import randint, random, uniform
 
 parser = OptionParser()
-parser.add_option("-g", "--geometry", dest="geometry",
-                  help="Geometry")
-parser.add_option("-f", "--geometryformat", dest="format",
-                  help="Format of the geometry")
-parser.add_option("--fixedgeometry", dest="fixedgeometry",
-                  help="Format of the fixed geometry")
-parser.add_option("--fixedgeometryformat", dest="fixedgeometryformat",
-                  help="Format of the fixed geometry")
+parser.add_option("-t", "--test")
 (options, args) = parser.parse_args()
 
-
-""" The workflow"""
-
-# Read the example geometry file or read SMILES code
-atoms = read(options.geometry, format=options.format)
-# print(atoms)
-
-# Preface
-## Identify the connectivity of the geometry
-connectivity_matrix_full = create_connectivity_matrix(atoms, bothways=True)
-connectivity_matrix_isolated = create_connectivity_matrix(atoms, bothways=False)
-list_of_torsions = detect_rotatble(connectivity_matrix_isolated)
-# print(list_of_torsions)
-
-## Identify the obstacles (Fixed frame) and PBC
-# Minimum Image Convention
-mic = False
-if options.fixedgeometry is not None:
-	fixed_frame = read(options.fixedgeometry, format=options.fixedgeometryformat)
-	pbc = fixed_frame.get_cell()[:]
-	if not np.array_equal(pbc, np.zeros([3, 3])):
-		mic = True
-		atoms.set_cell(pbc)
-		atoms.set_pbc(True)
-
-# Set atoms template to initial configuration
-set_centre_of_mass(atoms, np.array([0, 0, 0]))
-align_to_axes(atoms,  0, len(atoms)-1)
-# Check for clashes
-
-# connectivity_matrix = create_connectivity_matrix(atoms)
-# print(connectivity_matrix)
-# if not internal_clashes(atoms, connectivity_matrix_full):
-# 	sys.exit('The Cell is too small! Increase the cell size!')
-
-## Specify number of molecules 
-molecules = [atoms.copy() for i in range(2)]
-
-# Blacklist
-blacklist = create_blacklist(molecules, list_of_torsions)
-	
-Trials = 100000000000000
-Trial = 0
+""" Prefase"""
+dirs = Directories()
+output = Output("report.out")
+parameters = load_parameters("parameters.json")
+workflow = Workflow()
+structure = Structure(parameters)
+fixed_frame = Fixed_frame(parameters)
+blacklist = Blacklist(structure)
 
 
-while Trial<Trials:
-	Trial+=1
-	print("Start the new Trial ", Trial)
-	vector = create_internal_vector(molecules, list_of_torsions)
-	if not_in_blacklist(vector, blacklist):
-		blacklist = add_to_blacklist(vector, blacklist)
-		apply_to_molecules(molecules, vector, list_of_torsions, connectivity_matrix_isolated)
-		# print(measure_molecules(molecules, list_of_torsions))
-		if all_right(molecules, fixed_frame, connectivity_matrix_full, mic=mic):
-			ensemble = atoms.copy()
-			del ensemble[[atom.index for atom in atoms]]
-			for molecule in molecules:
-				ensemble+=molecule
-			ensemble+=fixed_frame
-			write("initial.in", ensemble, format="aims")
-			break
-		else:
-			ensemble = atoms.copy()
-			del ensemble[[atom.index for atom in atoms]]
-			for molecule in molecules:
-				ensemble+=molecule
-			ensemble+=fixed_frame
-			write("WithClash.in", ensemble, format="aims")
-			print("Next trial, produced with clash")
-			continue
+while workflow.trials < parameters["trials"]:
+	workflow.trials += 1
+	print("New Trial", workflow.trials)
+	output.write("Start the new Trial {}\n".format(workflow.trials))
+	# Generate the vector in internal degrees of freedom
+	configuration = structure.create_configuration(parameters)
+	if blacklist.not_in_blacklist(configuration):
+		blacklist.add_to_blacklist(configuration)
+		structure.apply_configuration(configuration)
+		if all_right(structure, fixed_frame):
+			dirs.create_directory()
+			ensemble = merge_together(structure, fixed_frame)
+			dirs.save_to_directory(ensemble, parameters)
 	else:
-		print("Next trial, found in blacklist")
+		output.write("Next trial, found in blacklist")
 		continue
 
 # Write the enesemble into file 
 # add the fixed frame also
 # Extend method can be used instead this:
-
 
 
 
@@ -107,7 +60,7 @@ while Trial<Trials:
 ## Check for intermolecular clashes
 ## Check for intramolecular clashes
 ## Check for PBC clashes
-
+# 
 # Optional Preexploration of the conformational space
 ## RMSD blacklisting
 ## Internal degrees of freedom blacklisting

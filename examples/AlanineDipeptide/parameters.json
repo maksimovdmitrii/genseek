@@ -1,0 +1,38 @@
+
+{
+	"trials": 10000000000000,
+	"max_trials": 100,
+	"number_of_replicas" : 2,
+	"geometry" : ["mol.sdf", "sdf"], 
+	"fixed_frame" : ["slab.in", "aims"],
+	"mic" : [[12.84530179 ,      0.00000000 ,       0.00000000],
+			 [0.00000000  ,     13.34922920 ,       0.00000000],
+			 [0.00000000  ,      0.00000000 ,      60.00000000]],
+
+	"configuration" : {
+
+		"torsions" : {
+					"same" : false, 
+					"list_of_tosrions" : "auto", 
+					"values": "random"
+		}, 
+
+		"orientations" : {
+					"same" : false, 
+					"values": "restricted",
+					"angle" : [0, 360],
+					"x" : [0, 0],
+					"y" : [0, 0],
+					"z" : [0, 1]
+		},
+
+		"coms" : {
+					"same" : false, 
+					"values": "restricted",
+					"x_axis" : [0, 13],
+					"y_axis" : [0, 13.5],
+					"z_axis" : [32, 36]
+		}
+	}			 
+    
+}
